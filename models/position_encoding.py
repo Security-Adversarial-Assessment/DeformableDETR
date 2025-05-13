@@ -14,7 +14,7 @@ import math
 import torch
 from torch import nn
 
-from util.misc import NestedTensor
+from ...DeformableDETR.util.misc import NestedTensor
 
 
 class PositionEmbeddingSine(nn.Module):

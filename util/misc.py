@@ -27,36 +27,36 @@ from torch import Tensor
 
 # needed due to empty tensor bug in pytorch and torchvision 0.5
 import torchvision
-if float(torchvision.__version__[:3]) < 0.5:
-    import math
-    from torchvision.ops.misc import _NewEmptyTensorOp
-    def _check_size_scale_factor(dim, size, scale_factor):
-        # type: (int, Optional[List[int]], Optional[float]) -> None
-        if size is None and scale_factor is None:
-            raise ValueError("either size or scale_factor should be defined")
-        if size is not None and scale_factor is not None:
-            raise ValueError("only one of size or scale_factor should be defined")
-        if not (scale_factor is not None and len(scale_factor) != dim):
-            raise ValueError(
-                "scale_factor shape must match input shape. "
-                "Input is {}D, scale_factor size is {}".format(dim, len(scale_factor))
-            )
-    def _output_size(dim, input, size, scale_factor):
-        # type: (int, Tensor, Optional[List[int]], Optional[float]) -> List[int]
-        assert dim == 2
-        _check_size_scale_factor(dim, size, scale_factor)
-        if size is not None:
-            return size
-        # if dim is not 2 or scale_factor is iterable use _ntuple instead of concat
-        assert scale_factor is not None and isinstance(scale_factor, (int, float))
-        scale_factors = [scale_factor, scale_factor]
-        # math.floor might return float in py2.7
-        return [
-            int(math.floor(input.size(i + 2) * scale_factors[i])) for i in range(dim)
-        ]
-elif float(torchvision.__version__[:3]) < 0.7:
-    from torchvision.ops import _new_empty_tensor
-    from torchvision.ops.misc import _output_size
+# if float(torchvision.__version__[:3]) < 0.5:
+#     import math
+#     from torchvision.ops.misc import _NewEmptyTensorOp
+#     def _check_size_scale_factor(dim, size, scale_factor):
+#         # type: (int, Optional[List[int]], Optional[float]) -> None
+#         if size is None and scale_factor is None:
+#             raise ValueError("either size or scale_factor should be defined")
+#         if size is not None and scale_factor is not None:
+#             raise ValueError("only one of size or scale_factor should be defined")
+#         if not (scale_factor is not None and len(scale_factor) != dim):
+#             raise ValueError(
+#                 "scale_factor shape must match input shape. "
+#                 "Input is {}D, scale_factor size is {}".format(dim, len(scale_factor))
+#             )
+#     def _output_size(dim, input, size, scale_factor):
+#         # type: (int, Tensor, Optional[List[int]], Optional[float]) -> List[int]
+#         assert dim == 2
+#         _check_size_scale_factor(dim, size, scale_factor)
+#         if size is not None:
+#             return size
+#         # if dim is not 2 or scale_factor is iterable use _ntuple instead of concat
+#         assert scale_factor is not None and isinstance(scale_factor, (int, float))
+#         scale_factors = [scale_factor, scale_factor]
+#         # math.floor might return float in py2.7
+#         return [
+#             int(math.floor(input.size(i + 2) * scale_factors[i])) for i in range(dim)
+#         ]
+# elif float(torchvision.__version__[:3]) < 0.7:
+#     from torchvision.ops import _new_empty_tensor
+#     from torchvision.ops.misc import _output_size
 
 
 class SmoothedValue(object):
@@ -316,23 +316,57 @@ def _max_by_axis(the_list):
     return maxes
 
 
+# def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
+#     # TODO make this more general
+#     if tensor_list[0].ndim == 3:
+#         # TODO make it support different-sized images
+#         max_size = _max_by_axis([list(img.shape) for img in tensor_list])
+#         # min_size = tuple(min(s) for s in zip(*[img.shape for img in tensor_list]))
+#         batch_shape = [len(tensor_list)] + max_size
+#         b, c, h, w = batch_shape
+#         dtype = tensor_list[0].dtype
+#         device = tensor_list[0].device
+#         tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
+#         mask = torch.ones((b, h, w), dtype=torch.bool, device=device)
+#         for img, pad_img, m in zip(tensor_list, tensor, mask):
+#             pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
+#             m[: img.shape[1], :img.shape[2]] = False
+#     else:
+#         raise ValueError('not supported')
+#     return NestedTensor(tensor, mask)
+
 def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     # TODO make this more general
     if tensor_list[0].ndim == 3:
+        if torchvision._is_tracing():
+            # nested_tensor_from_tensor_list() does not export well to ONNX
+            # call _onnx_nested_tensor_from_tensor_list() instead
+            return _onnx_nested_tensor_from_tensor_list(tensor_list)
+
         # TODO make it support different-sized images
         max_size = _max_by_axis([list(img.shape) for img in tensor_list])
-        # min_size = tuple(min(s) for s in zip(*[img.shape for img in tensor_list]))
         batch_shape = [len(tensor_list)] + max_size
         b, c, h, w = batch_shape
         dtype = tensor_list[0].dtype
         device = tensor_list[0].device
         tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
         mask = torch.ones((b, h, w), dtype=torch.bool, device=device)
+        tensor.requires_grad = True
+        padded_tensors = []
+        updated_masks = []
         for img, pad_img, m in zip(tensor_list, tensor, mask):
-            pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
-            m[: img.shape[1], :img.shape[2]] = False
+            new_pad_img = pad_img.clone()
+            new_pad_img[: img.shape[0], : img.shape[1], : img.shape[2]] = img.clone()
+            padded_tensors.append(new_pad_img)
+            new_m = m.clone()
+            new_m[: img.shape[1], : img.shape[2]] = False
+            updated_masks.append(new_m)
+        tensor = torch.stack(padded_tensors)
+        mask = torch.stack(updated_masks)
     else:
         raise ValueError('not supported')
+
+
     return NestedTensor(tensor, mask)
 
 
