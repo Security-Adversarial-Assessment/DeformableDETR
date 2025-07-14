@@ -15,8 +15,8 @@ import torch.nn.functional as F
 from torch import nn
 import math
 
-from util import box_ops
-from util.misc import (NestedTensor, nested_tensor_from_tensor_list,
+from ...DeformableDETR.util import box_ops
+from ...DeformableDETR.util.misc import (NestedTensor, nested_tensor_from_tensor_list,
                        accuracy, get_world_size, interpolate,
                        is_dist_avail_and_initialized, inverse_sigmoid)
 
@@ -243,7 +243,7 @@ class SetCriterion(nn.Module):
             losses['class_error'] = 100 - accuracy(src_logits[idx], target_classes_o)[0]
         return losses
 
-    @torch.no_grad()
+    # @torch.no_grad()
     def loss_cardinality(self, outputs, targets, indices, num_boxes):
         """ Compute the cardinality error, ie the absolute error in the number of predicted non-empty boxes
         This is not really a loss, it is intended for logging purposes only. It doesn't propagate gradients
@@ -394,7 +394,7 @@ class SetCriterion(nn.Module):
 class PostProcess(nn.Module):
     """ This module converts the model's output into the format expected by the coco api"""
 
-    @torch.no_grad()
+    # @torch.no_grad()
     def forward(self, outputs, target_sizes):
         """ Perform the computation
         Parameters:
@@ -442,9 +442,12 @@ class MLP(nn.Module):
 
 
 def build(args):
-    num_classes = 20 if args.dataset_file != 'coco' else 91
-    if args.dataset_file == "coco_panoptic":
-        num_classes = 250
+    # num_classes = 20 if args.dataset_file != 'coco' else 91
+    # if args.dataset_file == "coco_panoptic":
+    #     num_classes = 250
+
+    num_classes = args.num_classes+2
+
     device = torch.device(args.device)
 
     backbone = build_backbone(args)

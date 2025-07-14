@@ -41,7 +41,6 @@ def get_args_parser():
     parser.add_argument('--clip_max_norm', default=0.1, type=float,
                         help='gradient clipping max norm')
 
-
     parser.add_argument('--sgd', action='store_true')
 
     # Variants of Deformable DETR
@@ -189,15 +188,18 @@ def main(args):
         {
             "params":
                 [p for n, p in model_without_ddp.named_parameters()
-                 if not match_name_keywords(n, args.lr_backbone_names) and not match_name_keywords(n, args.lr_linear_proj_names) and p.requires_grad],
+                 if not match_name_keywords(n, args.lr_backbone_names) and not match_name_keywords(n,
+                                                                                                   args.lr_linear_proj_names) and p.requires_grad],
             "lr": args.lr,
         },
         {
-            "params": [p for n, p in model_without_ddp.named_parameters() if match_name_keywords(n, args.lr_backbone_names) and p.requires_grad],
+            "params": [p for n, p in model_without_ddp.named_parameters() if
+                       match_name_keywords(n, args.lr_backbone_names) and p.requires_grad],
             "lr": args.lr_backbone,
         },
         {
-            "params": [p for n, p in model_without_ddp.named_parameters() if match_name_keywords(n, args.lr_linear_proj_names) and p.requires_grad],
+            "params": [p for n, p in model_without_ddp.named_parameters() if
+                       match_name_keywords(n, args.lr_linear_proj_names) and p.requires_grad],
             "lr": args.lr * args.lr_linear_proj_mult,
         }
     ]
@@ -249,7 +251,8 @@ def main(args):
             # todo: this is a hack for doing experiment that resume from checkpoint and also modify lr scheduler (e.g., decrease lr in advance).
             args.override_resumed_lr_drop = True
             if args.override_resumed_lr_drop:
-                print('Warning: (hack) args.override_resumed_lr_drop is set to True, so args.lr_drop would override lr_drop in resumed lr_scheduler.')
+                print(
+                    'Warning: (hack) args.override_resumed_lr_drop is set to True, so args.lr_drop would override lr_drop in resumed lr_scheduler.')
                 lr_scheduler.step_size = args.lr_drop
                 lr_scheduler.base_lrs = list(map(lambda group: group['initial_lr'], optimizer.param_groups))
             lr_scheduler.step(lr_scheduler.last_epoch)
@@ -259,7 +262,7 @@ def main(args):
             test_stats, coco_evaluator = evaluate(
                 model, criterion, postprocessors, data_loader_val, base_ds, device, args.output_dir
             )
-    
+
     if args.eval:
         test_stats, coco_evaluator = evaluate(model, criterion, postprocessors,
                                               data_loader_val, base_ds, device, args.output_dir)
